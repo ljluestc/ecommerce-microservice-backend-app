@@ -1,0 +1,67 @@
+{
+  "ecommerce-logs-template": {
+    "index_patterns": ["ecommerce-*"],
+    "template": {
+      "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
+        "index.codec": "best_compression",
+        "index.refresh_interval": "5s"
+      },
+      "mappings": {
+        "properties": {
+          "@timestamp": {
+            "type": "date"
+          },
+          "service_name": {
+            "type": "keyword"
+          },
+          "log_level": {
+            "type": "keyword"
+          },
+          "logger": {
+            "type": "keyword"
+          },
+          "thread": {
+            "type": "keyword"
+          },
+          "log_message": {
+            "type": "text",
+            "analyzer": "standard"
+          },
+          "message": {
+            "type": "text",
+            "analyzer": "standard"
+          },
+          "http_method": {
+            "type": "keyword"
+          },
+          "request_path": {
+            "type": "keyword"
+          },
+          "response_code": {
+            "type": "integer"
+          },
+          "response_time": {
+            "type": "long"
+          },
+          "exception_type": {
+            "type": "keyword"
+          },
+          "exception_message": {
+            "type": "text"
+          },
+          "environment": {
+            "type": "keyword"
+          },
+          "tags": {
+            "type": "keyword"
+          },
+          "pid": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  }
+}

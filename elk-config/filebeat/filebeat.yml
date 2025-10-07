@@ -1,0 +1,55 @@
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /usr/share/filebeat/logs/*.log
+    - /usr/share/filebeat/logs/**/*.log
+  fields:
+    service: "ecommerce-app"
+  fields_under_root: false
+  multiline.pattern: '^\d{4}-\d{2}-\d{2}'
+  multiline.negate: true
+  multiline.match: after
+  close_inactive: 5m
+  scan_frequency: 10s
+
+- type: container
+  enabled: true
+  paths:
+    - '/var/lib/docker/containers/*/*.log'
+  processors:
+    - add_docker_metadata:
+        host: "unix:///var/run/docker.sock"
+    - decode_json_fields:
+        fields: ["message"]
+        target: ""
+        overwrite_keys: true
+
+# Add processors for better log parsing
+processors:
+  - add_host_metadata:
+      when.not.contains.tags: forwarded
+  - add_docker_metadata: ~
+  - add_kubernetes_metadata: ~
+
+# Output to Logstash
+output.logstash:
+  hosts: ["logstash:5044"]
+
+# Elasticsearch template settings
+setup.template.settings:
+  index.number_of_shards: 1
+  index.codec: best_compression
+
+# Kibana configuration for index patterns and dashboards
+setup.kibana:
+  host: "kibana:5601"
+
+# Logging configuration
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: /var/log/filebeat
+  name: filebeat
+  keepfiles: 7
+  permissions: 0644

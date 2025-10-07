@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProfile name="!prod">
+        <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+        <!-- File appender for structured JSON logs -->
+        <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+            <file>logs/${spring.application.name:-app}.log</file>
+            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+                <providers>
+                    <timestamp>
+                        <timeZone>UTC</timeZone>
+                    </timestamp>
+                    <logLevel/>
+                    <loggerName/>
+                    <mdc/>
+                    <arguments/>
+                    <message/>
+                    <pattern>
+                        <pattern>
+                            {
+                                "service": "${spring.application.name:-unknown}",
+                                "environment": "${spring.profiles.active:-development}",
+                                "version": "${app.version:-1.0.0}",
+                                "instance": "${server.port:-8080}"
+                            }
+                        </pattern>
+                    </pattern>
+                    <stackTrace/>
+                </providers>
+            </encoder>
+        </appender>
+
+        <!-- TCP appender for sending logs directly to Logstash -->
+        <appender name="TCP" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+            <destination>localhost:5000</destination>
+            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+                <providers>
+                    <timestamp>
+                        <timeZone>UTC</timeZone>
+                    </timestamp>
+                    <logLevel/>
+                    <loggerName/>
+                    <mdc/>
+                    <message/>
+                    <pattern>
+                        <pattern>
+                            {
+                                "service": "${spring.application.name:-unknown}",
+                                "environment": "${spring.profiles.active:-development}",
+                                "version": "${app.version:-1.0.0}",
+                                "instance": "${server.port:-8080}",
+                                "host": "${HOSTNAME:-localhost}"
+                            }
+                        </pattern>
+                    </pattern>
+                    <stackTrace/>
+                </providers>
+            </encoder>
+            <connectionTimeout>5000</connectionTimeout>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="TCP"/>
+        </root>
+
+        <!-- Spring Boot specific loggers -->
+        <logger name="org.springframework.web" level="INFO"/>
+        <logger name="org.springframework.cloud.gateway" level="DEBUG"/>
+        <logger name="com.selimhorri" level="DEBUG"/>
+        <logger name="org.springframework.transaction" level="INFO"/>
+        <logger name="org.hibernate.SQL" level="DEBUG"/>
+        <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE"/>
+
+        <!-- Performance monitoring -->
+        <logger name="performance" level="INFO"/>
+        <logger name="metrics" level="INFO"/>
+    </springProfile>
+
+    <springProfile name="prod">
+        <!-- Production logging - JSON only to file and TCP -->
+        <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+            <file>logs/${spring.application.name:-app}.log</file>
+            <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+                <fileNamePattern>logs/${spring.application.name:-app}.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+                <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                    <maxFileSize>100MB</maxFileSize>
+                </timeBasedFileNamingAndTriggeringPolicy>
+                <maxHistory>30</maxHistory>
+            </rollingPolicy>
+            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+                <providers>
+                    <timestamp>
+                        <timeZone>UTC</timeZone>
+                    </timestamp>
+                    <logLevel/>
+                    <loggerName/>
+                    <mdc/>
+                    <message/>
+                    <pattern>
+                        <pattern>
+                            {
+                                "service": "${spring.application.name:-unknown}",
+                                "environment": "${spring.profiles.active:-production}",
+                                "version": "${app.version:-1.0.0}",
+                                "instance": "${server.port:-8080}",
+                                "host": "${HOSTNAME:-localhost}"
+                            }
+                        </pattern>
+                    </pattern>
+                    <stackTrace/>
+                </providers>
+            </encoder>
+        </appender>
+
+        <appender name="TCP" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+            <destination>logstash:5000</destination>
+            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+                <providers>
+                    <timestamp>
+                        <timeZone>UTC</timeZone>
+                    </timestamp>
+                    <logLevel/>
+                    <loggerName/>
+                    <mdc/>
+                    <message/>
+                    <pattern>
+                        <pattern>
+                            {
+                                "service": "${spring.application.name:-unknown}",
+                                "environment": "${spring.profiles.active:-production}",
+                                "version": "${app.version:-1.0.0}",
+                                "instance": "${server.port:-8080}",
+                                "host": "${HOSTNAME:-localhost}"
+                            }
+                        </pattern>
+                    </pattern>
+                    <stackTrace/>
+                </providers>
+            </encoder>
+            <connectionTimeout>5000</connectionTimeout>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="FILE"/>
+            <appender-ref ref="TCP"/>
+        </root>
+
+        <logger name="com.selimhorri" level="INFO"/>
+        <logger name="org.hibernate.SQL" level="WARN"/>
+    </springProfile>
+</configuration>

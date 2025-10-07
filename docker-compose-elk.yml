@@ -1,0 +1,167 @@
+version: '3.8'
+
+services:
+  # Elasticsearch cluster
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: elasticsearch
+    environment:
+      - node.name=elasticsearch
+      - cluster.name=ecommerce-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+      - ./elk-config/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elk
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Logstash
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: logstash
+    volumes:
+      - ./elk-config/logstash/logstash.yml:/usr/share/logstash/config/logstash.yml:ro
+      - ./elk-config/logstash/pipelines.yml:/usr/share/logstash/config/pipelines.yml:ro
+      - ./elk-config/logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - ./logs:/usr/share/logstash/logs:ro
+    ports:
+      - "5044:5044"
+      - "5000:5000/tcp"
+      - "5000:5000/udp"
+      - "9600:9600"
+    environment:
+      LS_JAVA_OPTS: "-Xmx1g -Xms1g"
+    networks:
+      - elk
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9600/_node/stats || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Kibana
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: ""
+      ELASTICSEARCH_PASSWORD: ""
+    volumes:
+      - ./elk-config/kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    networks:
+      - elk
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Filebeat
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.11.0
+    container_name: filebeat
+    user: root
+    volumes:
+      - ./elk-config/filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - ./logs:/usr/share/filebeat/logs:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - filebeat-data:/usr/share/filebeat/data
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+      - KIBANA_HOST=kibana:5601
+    networks:
+      - elk
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    command: ["--strict.perms=false"]
+
+  # Metricbeat
+  metricbeat:
+    image: docker.elastic.co/beats/metricbeat:8.11.0
+    container_name: metricbeat
+    user: root
+    volumes:
+      - ./elk-config/metricbeat/metricbeat.yml:/usr/share/metricbeat/metricbeat.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /sys/fs/cgroup:/hostfs/sys/fs/cgroup:ro
+      - /proc:/hostfs/proc:ro
+      - /:/hostfs:ro
+      - metricbeat-data:/usr/share/metricbeat/data
+    environment:
+      - ELASTICSEARCH_HOST=elasticsearch:9200
+      - KIBANA_HOST=kibana:5601
+    networks:
+      - elk
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    command: ["--strict.perms=false", "-system.hostfs=/hostfs"]
+
+  # APM Server
+  apm-server:
+    image: docker.elastic.co/apm/apm-server:8.11.0
+    container_name: apm-server
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID"]
+    cap_drop: ["ALL"]
+    ports:
+      - "8200:8200"
+    networks:
+      - elk
+    command: >
+       apm-server -e
+         -E apm-server.rum.enabled=true
+         -E setup.kibana.host=kibana:5601
+         -E setup.template.settings.index.number_of_replicas=0
+         -E apm-server.kibana.enabled=true
+         -E apm-server.kibana.host=kibana:5601
+         -E output.elasticsearch.hosts=["elasticsearch:9200"]
+    healthcheck:
+      interval: 10s
+      retries: 12
+      test: curl --write-out 'HTTP %{http_code}' --fail --silent --output /dev/null http://localhost:8200/
+
+networks:
+  elk:
+    driver: bridge
+
+volumes:
+  elasticsearch-data:
+    driver: local
+  filebeat-data:
+    driver: local
+  metricbeat-data:
+    driver: local
